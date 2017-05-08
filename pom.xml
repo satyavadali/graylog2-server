@@ -94,7 +94,6 @@
         <disruptor.version>3.3.6</disruptor.version>
         <drools.version>6.5.0.Final</drools.version>
         <elasticsearch.version>2.4.4</elasticsearch.version>
-        <jest.version>2.4.5</jest.version>
         <gelfclient.version>1.4.1</gelfclient.version>
         <grok.version>0.1.6-graylog</grok.version>
         <guava-retrying.version>2.0.0</guava-retrying.version>
@@ -114,6 +113,7 @@
         <javax.ws.rs-api.version>2.0.1</javax.ws.rs-api.version>
         <jbcrypt.version>0.4</jbcrypt.version>
         <jersey.version>2.25.1</jersey.version>
+        <jest.version>5.0.0-beta.1</jest.version>
         <jmte.version>3.2.0</jmte.version>
         <jna.version>4.1.0</jna.version> <!-- for ES, make sure to use the version that ES uses -->
         <joda-time.version>2.9.9</joda-time.version>
