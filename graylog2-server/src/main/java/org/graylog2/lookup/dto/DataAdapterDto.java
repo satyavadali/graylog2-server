@@ -48,6 +48,10 @@ public abstract class DataAdapterDto {
     @JsonProperty("name")
     public abstract String name();
 
+    @JsonProperty("content_pack")
+    @Nullable
+    public abstract String contentPack();
+
     @JsonProperty("config")
     public abstract LookupDataAdapterConfiguration config();
 
@@ -71,6 +75,9 @@ public abstract class DataAdapterDto {
 
         @JsonProperty("name")
         public abstract Builder name(String name);
+
+        @JsonProperty("content_pack")
+        public abstract Builder contentPack(@Nullable String contentPack);
 
         @JsonProperty("config")
         public abstract Builder config(LookupDataAdapterConfiguration config);
