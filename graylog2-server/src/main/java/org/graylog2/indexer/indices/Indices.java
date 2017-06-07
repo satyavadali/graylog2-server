@@ -91,7 +91,6 @@ import org.joda.time.DateTimeZone;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.validation.constraints.NotNull;
@@ -123,7 +122,7 @@ import static org.graylog2.indexer.gson.GsonUtils.asString;
 @Singleton
 public class Indices {
     private static final Logger LOG = LoggerFactory.getLogger(Indices.class);
-    private static final String REOPENED_INDEX_SETTING = "graylog2_reopened";
+    private static final String REOPENED_ALIAS_SUFFIX = "_reopened";
 
     private final JestClient jestClient;
     private final Gson gson;
@@ -216,6 +215,11 @@ public class Indices {
     }
 
     public void close(String indexName) {
+        if (isReopened(indexName)) {
+            JestUtils.execute(jestClient,
+                new ModifyAliases.Builder(new RemoveAliasMapping.Builder(indexName, indexName + REOPENED_ALIAS_SUFFIX).build()).build(),
+                () -> "Couldn't remove reopened alias for index " + indexName + " before closing.");
+        }
         JestUtils.execute(jestClient, new CloseIndex.Builder(indexName).build(), () -> "Couldn't close index " + indexName);
         eventBus.post(IndicesClosedEvent.create(indexName));
     }
@@ -499,19 +503,21 @@ public class Indices {
         JestUtils.execute(jestClient, new Flush.Builder().addIndex(index).force().build(), () -> "Couldn't flush index " + index);
     }
 
-    public Map<String, Object> reopenIndexSettings() {
-        return ImmutableMap.of("index", ImmutableMap.of(REOPENED_INDEX_SETTING, true));
-    }
-
     public void reopenIndex(String index) {
         // Mark this index as re-opened. It will never be touched by retention.
-        final Map<String, Object> settings = reopenIndexSettings();
-        final UpdateSettings request = new UpdateSettings.Builder(settings).addIndex(index).build();
-
-        JestUtils.execute(jestClient, request, () -> "Couldn't update settings of index " + index);
+        markIndexReopened(index);
 
         // Open index.
         openIndex(index);
+    }
+
+    public String markIndexReopened(String index) {
+        final String aliasName = index + REOPENED_ALIAS_SUFFIX;
+        final ModifyAliases request = new ModifyAliases.Builder(new AddAliasMapping.Builder(index, aliasName).build()).build();
+
+        JestUtils.execute(jestClient, request, () -> "Couldn't create reopened alias for index " + index);
+
+        return aliasName;
     }
 
     private void openIndex(String index) {
@@ -520,39 +526,13 @@ public class Indices {
     }
 
     public boolean isReopened(String indexName) {
-        final JestResult jestResult = JestUtils.execute(jestClient, new State.Builder().withMetadata().build(), () -> "Couldn't read cluster state for index " + indexName);
+        final Optional<String> aliasTarget = aliasTarget(indexName + REOPENED_ALIAS_SUFFIX);
 
-        final JsonObject indexJson = Optional.ofNullable(asJsonObject(jestResult.getJsonObject()))
-                .map(response -> asJsonObject(response.get("metadata")))
-                .map(metadata -> asJsonObject(metadata.get("indices")))
-                .map(indices -> getIndexSettings(indices, indexName))
-                .orElse(new JsonObject());
-
-        return checkForReopened(indexJson);
+        return aliasTarget.map(target -> target.equals(indexName)).orElse(false);
     }
 
     public Map<String, Boolean> areReopened(Collection<String> indices) {
-        final JestResult jestResult = JestUtils.execute(jestClient, new State.Builder().withMetadata().build(), () -> "Couldn't read cluster state for indices " + indices);
-
-        final JsonObject indicesJson = getClusterStateIndicesMetadata(jestResult.getJsonObject());
-        return indices.stream().collect(
-                Collectors.toMap(Function.identity(), index -> checkForReopened(getIndexSettings(indicesJson, index)))
-        );
-    }
-
-    private JsonObject getIndexSettings(JsonObject indicesJson, String index) {
-        return Optional.ofNullable(asJsonObject(indicesJson))
-                .map(indices -> asJsonObject(indices.get(index)))
-                .map(idx -> asJsonObject(idx.get("settings")))
-                .map(settings -> asJsonObject(settings.get("index")))
-                .orElse(new JsonObject());
-    }
-
-    private boolean checkForReopened(@Nullable JsonObject indexSettings) {
-        return Optional.ofNullable(indexSettings)
-                .map(settings -> asString(settings.get(REOPENED_INDEX_SETTING))) // WTF, why is this a string?
-                .map(Boolean::parseBoolean)
-                .orElse(false);
+        return indices.stream().collect(Collectors.toMap(Function.identity(), this::isReopened));
     }
 
     public Set<String> getClosedIndices(final Collection<String> indices) {
@@ -603,26 +583,9 @@ public class Indices {
     }
 
     public Set<String> getReopenedIndices(final Collection<String> indices) {
-        final String indexList = String.join(",", indices);
-        final State request = new State.Builder().withMetadata().indices(indexList).build();
-
-        final JestResult jestResult = JestUtils.execute(jestClient, request, () -> "Couldn't read cluster state for reopened indices " + indices);
-        final JsonObject indicesJson = getClusterStateIndicesMetadata(jestResult.getJsonObject());
-        final ImmutableSet.Builder<String> reopenedIndices = ImmutableSet.builder();
-
-        for (Map.Entry<String, JsonElement> entry : indicesJson.entrySet()) {
-            final String indexName = entry.getKey();
-            final JsonElement value = entry.getValue();
-            if (value.isJsonObject()) {
-                final JsonObject indexSettingsJson = value.getAsJsonObject();
-                final JsonObject indexSettings = getIndexSettings(indexSettingsJson, indexName);
-                if (checkForReopened(indexSettings)) {
-                    reopenedIndices.add(indexName);
-                }
-            }
-        }
-
-        return reopenedIndices.build();
+        return indices.stream()
+            .filter(this::isReopened)
+            .collect(Collectors.toSet());
     }
 
     public Set<String> getReopenedIndices(final IndexSet indexSet) {
