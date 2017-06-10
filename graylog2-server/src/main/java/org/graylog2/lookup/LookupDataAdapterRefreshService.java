@@ -62,8 +62,7 @@ public class LookupDataAdapterRefreshService extends AbstractIdleService {
 
     @Override
     protected void startUp() throws Exception {
-        // Make sure we start with a blank slate
-        futures.clear();
+        // Nothing to do
     }
 
     @Override
