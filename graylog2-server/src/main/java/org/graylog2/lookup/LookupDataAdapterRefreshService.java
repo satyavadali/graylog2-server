@@ -125,7 +125,7 @@ public class LookupDataAdapterRefreshService extends AbstractIdleService {
      */
     public void remove(LookupDataAdapter dataAdapter) {
         if (state() == State.STOPPING || state() == State.TERMINATED) {
-            LOG.debug("Service is in state <{}> - not removing job for <{}/{}>", state(), dataAdapter.name(), dataAdapter.id());
+            LOG.debug("Service is in state <{}> - not removing job for <{}/{}/@{}>", state(), dataAdapter.name(), dataAdapter.id(), objectId(dataAdapter));
             return;
         }
 
@@ -145,7 +145,7 @@ public class LookupDataAdapterRefreshService extends AbstractIdleService {
             try {
                 dataAdapter.refresh(cachePurge);
             } catch (Exception e) {
-                LOG.warn("Unhandled error while refreshing <{}/{}>", dataAdapter.name(), dataAdapter.id(), e);
+                LOG.warn("Unhandled error while refreshing <{}/{}/@{}>", dataAdapter.name(), dataAdapter.id(), objectId(dataAdapter), e);
             }
         }, interval.getMillis(), interval.getMillis(), TimeUnit.MILLISECONDS);
     }
